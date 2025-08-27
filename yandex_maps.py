@@ -42,8 +42,8 @@ class YandexMaps:
 
         self._chrome_options = webdriver.ChromeOptions()
         self._chrome_options.add_argument(f"--user-agent={self._ua.random}")
-        # self._chrome_options.add_argument("--headless")
-        # self._chrome_options.add_argument("--disable-gpu")
+        self._chrome_options.add_argument("--headless")
+        self._chrome_options.add_argument("--disable-gpu")
 
         self._browser = webdriver.Chrome(options=self._chrome_options)
         self._waiter = WebDriverWait(self._browser, 10)
@@ -72,19 +72,30 @@ class YandexMaps:
         logging.info(f'Found all points of {self.organization}.')
     
     def _get_all_reviews(self):
+        main_current_handle = self._browser.current_window_handle
         RED = '\033[91m'
         for place in tqdm(self.places, desc=f'{RED}Get reviews from places{RED}', colour='green'):
-            time.sleep(1.5)
+            time.sleep(1)
             self._browser.execute_script("return arguments[0].scrollIntoView(true);", place)
             address = place.find_element(By.CSS_SELECTOR, ".search-business-snippet-view__address").text
-            place.click()
+            
+            link_review = place.find_element(By.CSS_SELECTOR, "a[class=link-overlay]").get_attribute("href")
+            self._browser.switch_to.new_window("review_window")
+            self._browser.get(link_review)
+            self._browser.set_page_load_timeout(5)
 
-            review_button = self._browser.find_element(By.CSS_SELECTOR, "._name_reviews")
+            review_button = self._waiter.until(EC.presence_of_element_located((By.CSS_SELECTOR, "._name_reviews")))
+            self._browser.execute_script("return arguments[0].scrollIntoView(true);", review_button)
             review_button.click()
 
             self.__do_review_visibility()
             self.__get_text_from_review()
             self.__save_reviews_to_address(address)
+
+            self._browser.execute_script("return arguments[0].scrollIntoView(true);", self._reviews[0])
+
+            self._browser.close()
+            self._browser.switch_to.window(main_current_handle)
     
     def __do_review_visibility(self):
         last_review = None
@@ -115,20 +126,15 @@ class YandexMaps:
     def __save_reviews_to_address(self, address):
         self.address_reviews[address] = self._reviews_comments
         logging.info(f"Successful save reviews to {address}.")
-        self._browser.execute_script("return arguments[0].scrollIntoView(true);", self._reviews[0])
-        # self._browser.back()
-        self._browser.find_element(By.CSS_SELECTOR, ".small-search-form-view > button").click()
 
 
     def __call__(self, *args, **kwds):
         self._browser.get(self.url)
         self._browser.set_page_load_timeout(5)
-        # self._browser.maximize_window()
 
         self._input_name_loc_org()
-        time.sleep(120)
-        # self._find_all_points_orgs()
-        # self._get_all_reviews()
+        self._find_all_points_orgs()
+        self._get_all_reviews()
 
         self._browser.quit()
         
