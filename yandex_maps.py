@@ -1,74 +1,138 @@
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
+
 from fake_useragent import UserAgent
+
 import time
+import logging
 
-ua = UserAgent(min_percentage=80, platforms='desktop')
+from tqdm import tqdm
 
-url = "https://yandex.ru/maps/"
-chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument(f"--user-agent={ua.random}")
+BLUE = '\033[94m'
+RESET = '\033[0m'
+
+class BlueFormatter(logging.Formatter):
+    def format(self, record):
+        record.msg = f"{BLUE}{record.msg}{RESET}"
+        return super().format(record)
+
+handler = logging.StreamHandler()
+handler.setFormatter(BlueFormatter('%(asctime)s - %(message)s', 
+                                   datefmt="%H:%M:%S"))
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+for h in logger.handlers[:]:
+    logger.removeHandler(h)
+
+logger.addHandler(handler)
 
 
-with webdriver.Chrome(options=chrome_options) as browser:
-    browser.get(url)
+class YandexMaps:
+    def __init__(self, city, organization):
+        self._ua = UserAgent(min_percentage=80, platforms='desktop')
+        self.city = city
+        self.organization = organization
 
-    waiter = WebDriverWait(browser, 10)
-    actions = ActionChains(browser)
+        self.url = "https://yandex.ru/maps/"
 
-    # Вводим город, заведение
-    search_org = browser.find_element(By.CSS_SELECTOR, "input._bold")
-    search_org.send_keys("Екатеринбург, Rostics")
-    find_button = browser.find_element(By.CSS_SELECTOR, 'button[aria-label="Найти"]')
-    find_button.click()
+        self._chrome_options = webdriver.ChromeOptions()
+        self._chrome_options.add_argument(f"--user-agent={self._ua.random}")
+        # self._chrome_options.add_argument("--headless")
+        # self._chrome_options.add_argument("--disable-gpu")
 
-    # Ищем все заведения
-    last_place = None
-    while True:
-       time.sleep(1)
-       places = browser.find_elements(By.CSS_SELECTOR, "ul.search-list-view__list > li")
+        self._browser = webdriver.Chrome(options=self._chrome_options)
+        self._waiter = WebDriverWait(self._browser, 10)
+        self._actions = ActionChains(self._browser)
 
-       if places[-1] == last_place:
-           break
+        self.address_reviews = {}
     
-       browser.execute_script("return arguments[0].scrollIntoView(true);", places[-1])
-       last_place = places[-1]  
+    def _input_name_loc_org(self):
+        search_org = self._waiter.until(EC.presence_of_element_located((By.CSS_SELECTOR, "input._bold")))
+        search_org.send_keys(f"{self.city}, {self.organization}")
+        find_button = self._browser.find_element(By.CSS_SELECTOR, 'button[aria-label="Найти"]')
+        find_button.click()
+        logging.info("Input name and location of organization was successful...")
+    
+    def _find_all_points_orgs(self):
+        last_place = None
+        while True:
+            time.sleep(1)
+            self.places = self._browser.find_elements(By.CSS_SELECTOR, "ul.search-list-view__list > li")
 
-    # Проходимся по каждому заведению и собираем отзывы
-    for place in places:
-        time.sleep(1)
-        browser.execute_script("return arguments[0].scrollIntoView(true);", place)
-        place.click()
+            if self.places[-1] == last_place:
+                break
+            
+            self._browser.execute_script("return arguments[0].scrollIntoView(true);", self.places[-1])
+            last_place = self.places[-1]
+        logging.info(f'Found all points of {self.organization}.')
+    
+    def _get_all_reviews(self):
+        RED = '\033[91m'
+        for place in tqdm(self.places, desc=f'{RED}Get reviews from places{RED}', colour='green'):
+            time.sleep(1.5)
+            self._browser.execute_script("return arguments[0].scrollIntoView(true);", place)
+            address = place.find_element(By.CSS_SELECTOR, ".search-business-snippet-view__address").text
+            place.click()
 
-        review_button = browser.find_element(By.CSS_SELECTOR, "._name_reviews")
-        review_button.click()
+            review_button = self._browser.find_element(By.CSS_SELECTOR, "._name_reviews")
+            review_button.click()
 
+            self.__do_review_visibility()
+            self.__get_text_from_review()
+            self.__save_reviews_to_address(address)
+    
+    def __do_review_visibility(self):
         last_review = None
         while True:
             time.sleep(1)
-            reviews = browser.find_elements(By.CSS_SELECTOR, ".business-review-view__body")
+            self._reviews = self._browser.find_elements(By.CSS_SELECTOR, ".business-review-view__body")
 
-            if reviews[-1] == last_review:
+            if self._reviews[-1] == last_review:
                 break
             
-            browser.execute_script("return arguments[0].scrollIntoView(true);", reviews[-1])
-            last_review = reviews[-1]
-
-        reviews_comments = []
-        for review in reviews:
-            browser.execute_script("return arguments[0].scrollIntoView(true);", review)
+            self._browser.execute_script("return arguments[0].scrollIntoView(true);", self._reviews[-1])
+            last_review = self._reviews[-1]
+        logging.info('We do all reviews visibility of that place...')
+    
+    def __get_text_from_review(self):
+        YELLOW = '\033[93m'
+        self._reviews_comments = []
+        for review in tqdm(self._reviews, desc=f'{YELLOW}Get reviews complete{YELLOW}', colour='green'):
 
             if more_button := review.find_elements(By.CSS_SELECTOR, ".spoiler-view__button"):
-                actions.move_to_element(more_button[0]).click().perform()
-                actions.reset_actions()
+                self._browser.execute_script("return arguments[0].scrollIntoView(true);", review)
+                self._actions.move_to_element(more_button[0]).click().perform()
+                self._actions.reset_actions()
 
             review_text = review.text
-            reviews_comments.append(review_text)
+            self._reviews_comments.append(review_text)
 
-        browser.execute_script("return arguments[0].scrollIntoView(true);", reviews[0])
-        browser.back()
+    def __save_reviews_to_address(self, address):
+        self.address_reviews[address] = self._reviews_comments
+        logging.info(f"Successful save reviews to {address}.")
+        self._browser.execute_script("return arguments[0].scrollIntoView(true);", self._reviews[0])
+        # self._browser.back()
+        self._browser.find_element(By.CSS_SELECTOR, ".small-search-form-view > button").click()
+
+
+    def __call__(self, *args, **kwds):
+        self._browser.get(self.url)
+        self._browser.set_page_load_timeout(5)
+        # self._browser.maximize_window()
+
+        self._input_name_loc_org()
+        time.sleep(120)
+        # self._find_all_points_orgs()
+        # self._get_all_reviews()
+
+        self._browser.quit()
+        
+        return self.address_reviews
+
+yandex_map = YandexMaps(city='Екатеринбург', organization='Rostics')
+data = yandex_map()
