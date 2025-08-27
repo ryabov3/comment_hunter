@@ -75,7 +75,7 @@ class YandexMaps:
         main_current_handle = self._browser.current_window_handle
         RED = '\033[91m'
         for place in tqdm(self.places, desc=f'{RED}Get reviews from places{RED}', colour='green'):
-            time.sleep(1)
+            time.sleep(0.3)
             self._browser.execute_script("return arguments[0].scrollIntoView(true);", place)
             address = place.find_element(By.CSS_SELECTOR, ".search-business-snippet-view__address").text
             
@@ -91,8 +91,6 @@ class YandexMaps:
             self.__do_review_visibility()
             self.__get_text_from_review()
             self.__save_reviews_to_address(address)
-
-            self._browser.execute_script("return arguments[0].scrollIntoView(true);", self._reviews[0])
 
             self._browser.close()
             self._browser.switch_to.window(main_current_handle)
@@ -126,7 +124,6 @@ class YandexMaps:
     def __save_reviews_to_address(self, address):
         self.address_reviews[address] = self._reviews_comments
         logging.info(f"Successful save reviews to {address}.")
-
 
     def __call__(self, *args, **kwds):
         self._browser.get(self.url)
