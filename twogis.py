@@ -13,13 +13,16 @@ import logging
 
 from tqdm import tqdm
 
-BLUE = "\033[94m"
+from save_data_folder.save_data import CommentSaver
+from parser_exceptions.exceptions import FileFormatError
+
+GREEN = "\033[32m"
 RESET = "\033[0m"
 
 
 class BlueFormatter(logging.Formatter):
     def format(self, record):
-        record.msg = f"{BLUE}{record.msg}{RESET}"
+        record.msg = f"{GREEN}{record.msg}{RESET}"
         return super().format(record)
 
 
@@ -40,7 +43,12 @@ class TwoGis:
         self._ua = UserAgent(min_percentage=80, platforms="desktop")
         self.city = city
         self.organization = organization
-        self.path_to = path_to
+
+        if path_to is not None and not path_to.endswith(".xlsx"):
+            raise FileFormatError("You can only save files in excel format. Please, try again.")
+    
+        self.path_to_save = path_to
+        self._ch = CommentSaver(path=self.path_to_save)
 
         self.url = "https://2gis.ru/"
 
@@ -161,8 +169,9 @@ class TwoGis:
         self._get_all_reviews()
 
         self._browser.quit()
-        return self.address_reviews
-
-
-twogis = TwoGis(city="Екатеринбург", organization="Жизньмарт")
-twogis()
+        
+        if self.path_to_save is None:
+            return self._ch(data=self.address_reviews)
+        else:
+            self._ch(path=self.path_to_save, data=self.address_reviews)
+            logging.info(f"Save data path to {self.path_to_save}")

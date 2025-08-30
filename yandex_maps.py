@@ -11,12 +11,15 @@ import logging
 
 from tqdm import tqdm
 
-BLUE = '\033[94m'
+from save_data_folder.save_data import CommentSaver
+from parser_exceptions.exceptions import FileFormatError
+
+GREEN = "\033[32m"
 RESET = '\033[0m'
 
 class BlueFormatter(logging.Formatter):
     def format(self, record):
-        record.msg = f"{BLUE}{record.msg}{RESET}"
+        record.msg = f"{GREEN}{record.msg}{RESET}"
         return super().format(record)
 
 handler = logging.StreamHandler()
@@ -38,6 +41,12 @@ class YandexMaps:
         self.city = city
         self.organization = organization
         self.path_to = path_to
+
+        if path_to is not None and not path_to.endswith(".xlsx"):
+            raise FileFormatError("You can only save files in excel format. Please, try again.")
+    
+        self.path_to_save = path_to
+        self._ch = CommentSaver(path=self.path_to_save)
 
         self.url = "https://yandex.ru/maps/"
 
@@ -63,7 +72,7 @@ class YandexMaps:
         last_place = None
         while True:
             time.sleep(1)
-            self.places = self._browser.find_elements(By.CSS_SELECTOR, "ul.search-list-view__list > li")
+            self.places = self._waiter.until((By.CSS_SELECTOR, "ul.search-list-view__list > li"))
 
             if self.places[-1] == last_place:
                 break
@@ -136,7 +145,8 @@ class YandexMaps:
 
         self._browser.quit()
         
-        return self.address_reviews
-
-yandex_map = YandexMaps(city='Екатеринбург', organization='Жизньмарт')
-data = yandex_map()
+        if self.path_to_save is None:
+            return self._ch(data=self.address_reviews)
+        else:
+            self._ch(path=self.path_to_save, data=self.address_reviews)
+            logging.info(f"Save data path to {self.path_to_save}")
