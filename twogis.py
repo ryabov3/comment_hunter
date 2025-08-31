@@ -69,7 +69,7 @@ class TwoGis:
         )
         search_org.send_keys(f"{self.city}, {self.organization}")
         self._actions.move_to_element(search_org).send_keys(Keys.ENTER).perform()
-        logging.info("Input name and location of organization.")
+        logging.info(f"Input name and location of {self.organization} was successful...")
     
     def _find_all_points_org(self):
         self._all_urls_places = []
@@ -92,7 +92,7 @@ class TwoGis:
                 )
                 self._actions.move_to_element(next_page_button).click().perform()
             except NoSuchElementException:
-                logging.info("Got links on all places.")
+                logging.info(f"Got links on all {len(self._all_urls_places)} places.")
                 break
     
     def _get_all_reviews(self):

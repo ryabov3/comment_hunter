@@ -43,7 +43,7 @@ class YandexMaps:
         self.path_to = path_to
 
         if path_to is not None and not path_to.endswith(".xlsx"):
-            raise FileFormatError("You can only save files in excel format. Please, try again.")
+            raise FileFormatError("You can only save files in Excel format. Please, try again.")
     
         self.path_to_save = path_to
         self._ch = CommentSaver(path=self.path_to_save)
@@ -66,26 +66,26 @@ class YandexMaps:
         search_org.send_keys(f"{self.city}, {self.organization}")
         find_button = self._browser.find_element(By.CSS_SELECTOR, 'button[aria-label="Найти"]')
         find_button.click()
-        logging.info("Input name and location of organization was successful...")
+        logging.info(f"Input name and location of {self.organization} was successful...")
     
     def _find_all_points_orgs(self):
         last_place = None
         while True:
             time.sleep(1)
-            self.places = self._waiter.until((By.CSS_SELECTOR, "ul.search-list-view__list > li"))
+            self.places = self._waiter.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "ul.search-list-view__list > li")))
 
             if self.places[-1] == last_place:
                 break
             
             self._browser.execute_script("return arguments[0].scrollIntoView(true);", self.places[-1])
             last_place = self.places[-1]
-        logging.info(f'Found all points of {self.organization}.')
+        logging.info(f'Found all {len(self.places)} points of {self.organization}.')
     
     def _get_all_reviews(self):
         main_current_handle = self._browser.current_window_handle
         RED = '\033[91m'
-        for place in tqdm(self.places, desc=f'{RED}Get reviews from places{RED}', colour='green'):
-            time.sleep(1)
+        for place in self.places:
+            self._waiter.until(EC.visibility_of(place))
             self._browser.execute_script("return arguments[0].scrollIntoView(true);", place)
             address = place.find_element(By.CSS_SELECTOR, ".search-business-snippet-view__address").text
             
@@ -144,9 +144,13 @@ class YandexMaps:
         self._get_all_reviews()
 
         self._browser.quit()
+        print()
         
         if self.path_to_save is None:
             return self._ch(data=self.address_reviews)
         else:
             self._ch(path=self.path_to_save, data=self.address_reviews)
             logging.info(f"Save data path to {self.path_to_save}")
+
+yandex_maps = YandexMaps(city='Екатеринбург', organization='Сhipdip', path_to='chipdip.xlsx')
+yandex_maps()
